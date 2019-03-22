@@ -1,14 +1,15 @@
 package main
 
 import (
+	"github.com/shuza/microservice-a-to-z/vehicle-position-simulator/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"github.com/tealeg/xlsx"
-	"microservice-a-to-z/vehicle-position-simulator/model"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 /**
@@ -21,9 +22,8 @@ import (
  **/
 
 func main() {
-	//dummyDataDir := "/home/sanjay/go/src/microservice-a-to-z/vehicle-position-simulator/data"
 	currentDir, _ := os.Getwd()
-	dummyDataDir := currentDir + "/data/"
+	dummyDataDir := currentDir + "/vehicle_data/"
 
 	channel, err := newChannel()
 	failOnError(err, "Failed to connect Message Broker")
@@ -45,7 +45,6 @@ func main() {
 
 	failOnError(err, "Failed to read Dir")
 	coroutineWaiter.Wait()
-	log.Info("\n\t====\tFinished\t====")
 }
 
 func simulateVehiclePosition(coroutineWaiter *sync.WaitGroup, channel *amqp.Channel, queue amqp.Queue, vehicleName string, xlFile *xlsx.File) {
@@ -60,6 +59,9 @@ func simulateVehiclePosition(coroutineWaiter *sync.WaitGroup, channel *amqp.Chan
 
 				position := model.VehiclePosition{vehicleName, lat, lng}
 				sendPosition(position, channel, queue)
+
+				//	add few delay to make the simulation more realistic
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}
