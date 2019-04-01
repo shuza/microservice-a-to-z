@@ -14,6 +14,6 @@ import "github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 type DbClient interface {
 	Open() error
 	UpdatePosition(position model.VehiclePosition)
-	GetLastPositionFor(vehicleName string) model.VehiclePosition
+	GetLastPositionFor(vehicleName string) (model.VehiclePosition, error)
 	Disconnect()
 }

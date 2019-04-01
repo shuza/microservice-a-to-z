@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 	log "github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -52,8 +53,20 @@ func (c *MongoDbClient) UpdatePosition(position model.VehiclePosition) {
 	}
 }
 
-func (c *MongoDbClient) GetLastPositionFor(vehicleName string) model.VehiclePosition {
-	return model.VehiclePosition{}
+func (c *MongoDbClient) GetLastPositionFor(vehicleName string) (model.VehiclePosition, error) {
+	cursor, err := c.client.Database("test").Collection("vehicle").Find(context.Background(), bson.D{})
+	if err != nil {
+		log.Warnf("Get last position for %s Error \t:\t%s", vehicleName, err)
+		return model.VehiclePosition{}, err
+	}
+	defer cursor.Close(context.Background())
+	position := model.VehiclePosition{}
+	for cursor.Next(context.Background()) {
+		err = cursor.Decode(&position)
+	}
+
+	return position, nil
+
 }
 
 func (c *MongoDbClient) Disconnect() {
