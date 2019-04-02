@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/json"
+	"github.com/joho/godotenv"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/broker"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/client"
-	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -18,27 +17,25 @@ import (
  **/
 
 func main() {
-	messageClient := broker.RabbitMqClient{}
-	if err := messageClient.Init(); err != nil {
-		failOnError("Client init failed", err)
-	}
+	godotenv.Load()
+	initMongoDbClient()
+	defer client.MongoDbClient.Disconnect()
 
-	dataChannel, err := messageClient.GetConsumer()
-	failOnError("Failed to get position", err)
+	initMessageBroker()
+	go broker.RabbitMqClient.ObserveAndStore(client.MongoDbClient)
 
-	mongoClient := client.MongoDbClient{}
-	err = mongoClient.Open()
+}
+
+func initMongoDbClient() {
+	client.MongoDbClient = &client.MongoDbConnection{}
+	err := client.MongoDbClient.Open()
 	failOnError("Failed to Connect MongoDB", err)
+}
 
-	for byteData := range dataChannel {
-		data := model.VehiclePosition{}
-		err := json.Unmarshal(byteData.Body, &data)
-		if err != nil {
-			log.Warnf("Json Parse Error : \t%s", err)
-		} else {
-			mongoClient.UpdatePosition(data)
-		}
-	}
+func initMessageBroker() {
+	broker.RabbitMqClient = &broker.RabbitMqConnection{}
+	err := broker.RabbitMqClient.Init()
+	failOnError("Client init failed", err)
 }
 
 func failOnError(tag string, err error) {

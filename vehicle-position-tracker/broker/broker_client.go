@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/client"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 	"github.com/streadway/amqp"
 )
@@ -18,5 +19,6 @@ type IBrokerClient interface {
 	Init() error
 	GetQueue() (amqp.Queue, error)
 	SendVehiclePosition(position model.VehiclePosition) error
-	GetConsumer()
+	GetConsumer() (<-chan amqp.Delivery, error)
+	ObserveAndStore(dbClient client.IDbClient)
 }

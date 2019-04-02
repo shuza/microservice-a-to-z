@@ -1,10 +1,13 @@
 package broker
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/client"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"os"
 )
 
 /**
@@ -16,7 +19,7 @@ import (
  * :=  Fun  :  Coffee  :  Code
  **/
 
-type RabbitMqClient struct {
+type RabbitMqConnection struct {
 	HostUrl   string
 	Port      string
 	Username  string
@@ -25,12 +28,14 @@ type RabbitMqClient struct {
 	QueueName string
 }
 
-func (c *RabbitMqClient) Init() error {
-	c.HostUrl = "localhost"
-	c.Port = "5672"
-	c.Username = "admin"
-	c.Password = "admin"
-	c.QueueName = "position"
+var RabbitMqClient IBrokerClient
+
+func (c *RabbitMqConnection) Init() error {
+	c.HostUrl = os.Getenv("RABBIT_MQ_HOST")
+	c.Port = os.Getenv("RABBIT_MQ_PORT")
+	c.Username = os.Getenv("RABBIT_MQ_USERNAME")
+	c.Password = os.Getenv("RABBIT_MQ_PASSWORD")
+	c.QueueName = os.Getenv("RABBIT_MQ_QUEUE")
 
 	connectionStr := fmt.Sprintf("amqp://%s:%s@%s:%s/", c.Username, c.Password, c.HostUrl, c.Port)
 	conn, err := amqp.Dial(connectionStr)
@@ -47,7 +52,7 @@ func (c *RabbitMqClient) Init() error {
 	return nil
 }
 
-func (c *RabbitMqClient) GetQueue() (amqp.Queue, error) {
+func (c *RabbitMqConnection) GetQueue() (amqp.Queue, error) {
 	return c.Channel.QueueDeclare(
 		c.QueueName, // name
 		true,        // durable
@@ -58,7 +63,7 @@ func (c *RabbitMqClient) GetQueue() (amqp.Queue, error) {
 	)
 }
 
-func (c *RabbitMqClient) SendVehiclePosition(position model.VehiclePosition) error {
+func (c *RabbitMqConnection) SendVehiclePosition(position model.VehiclePosition) error {
 	err := c.Channel.Publish(
 		"",
 		c.QueueName,
@@ -73,7 +78,7 @@ func (c *RabbitMqClient) SendVehiclePosition(position model.VehiclePosition) err
 }
 
 //	return channel for receiving data
-func (c *RabbitMqClient) GetConsumer() (<-chan amqp.Delivery, error) {
+func (c *RabbitMqConnection) GetConsumer() (<-chan amqp.Delivery, error) {
 	return c.Channel.Consume(
 		c.QueueName,
 		"",
@@ -83,6 +88,20 @@ func (c *RabbitMqClient) GetConsumer() (<-chan amqp.Delivery, error) {
 		false,
 		nil,
 	)
+}
+
+func (c *RabbitMqConnection) ObserveAndStore(dbClient client.IDbClient) {
+	dataChannel, err := c.GetConsumer()
+	failOnError("Failed to consume message", err)
+
+	for byteData := range dataChannel {
+		data := model.VehiclePosition{}
+		if err := json.Unmarshal(byteData.Body, &data); err == nil {
+			client.MongoDbClient.UpdatePosition(data)
+		} else {
+			log.Warnf("Json message Parse Error : \t%s", err)
+		}
+	}
 }
 
 func failOnError(tag string, err error) {

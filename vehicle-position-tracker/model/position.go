@@ -1,6 +1,9 @@
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 /**
  * :=  created by:  Shuza
@@ -12,9 +15,10 @@ import "encoding/json"
  **/
 
 type VehiclePosition struct {
-	Name      string  `json:"name"`
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
+	Name      string    `json:"name"`
+	Latitude  float64   `json:"latitude"`
+	Longitude float64   `json:"longitude"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (model *VehiclePosition) ToJson() []byte {

@@ -1,13 +1,13 @@
 package client
 
 import (
-	"context"
 	"fmt"
 	"github.com/shuza/microservice-a-to-z/vehicle-position-tracker/model"
 	log "github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"gopkg.in/mgo.v2"
+	"os"
+	"time"
 )
 
 /**
@@ -20,55 +20,48 @@ import (
  **/
 
 //	Real implementation of mongoDB client
-type MongoDbClient struct {
-	hostUrl string
-	port    string
-	client  *mongo.Client
+type MongoDbConnection struct {
+	conn *mgo.Session
 }
 
-func (c *MongoDbClient) Open() error {
-	c.hostUrl = "localhost"
-	c.port = "27017"
-	connectionStr := fmt.Sprintf("mongodb://%s:%s", c.hostUrl, c.port)
-	clientOptions := options.Client().ApplyURI(connectionStr)
-	conn, err := mongo.Connect(context.TODO(), clientOptions)
-	if err != nil {
+var MongoDbClient IDbClient
+
+func (c *MongoDbConnection) Open() error {
+	connectionStr := fmt.Sprintf("mongodb://%s:%s",
+		os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	if conn, err := mgo.Dial(connectionStr); err != nil {
 		return err
-	}
-	c.client = conn
-
-	//	Check the connection
-	err = c.client.Ping(context.TODO(), nil)
-	return err
-}
-
-func (c *MongoDbClient) UpdatePosition(position model.VehiclePosition) {
-	collection := c.client.Database("test").Collection("vehicle")
-	insertResult, err := collection.InsertOne(context.TODO(), position)
-
-	if err != nil {
-		log.Warnf("%s\t:\t%s", "Can't update "+position.Name, err)
 	} else {
-		log.Infof("%s\tupdated ID ==\t%s"+position.Name, insertResult)
+		c.conn = conn
+	}
+
+	return nil
+}
+
+func (c *MongoDbConnection) UpdatePosition(position model.VehiclePosition) {
+	position.CreatedAt = time.Now()
+	collection := c.conn.DB(os.Getenv("MONGO_DB_NAME")).C("vehicle")
+	if err := collection.Insert(position); err != nil {
+		log.Warnf("%s\t:\t%s", "Can't update "+position.Name, err)
 	}
 }
 
-func (c *MongoDbClient) GetLastPositionFor(vehicleName string) (model.VehiclePosition, error) {
-	cursor, err := c.client.Database("test").Collection("vehicle").Find(context.Background(), bson.D{})
+func (c *MongoDbConnection) GetLastPositionFor(vehicleName string) (model.VehiclePosition, error) {
+	var positions []model.VehiclePosition
+	err := c.conn.DB(os.Getenv("MONGO_DB_NAME")).C("vehicle").
+		Find(bson.M{"name": vehicleName}).
+		Sort("-created_at").
+		All(&positions)
+
 	if err != nil {
-		log.Warnf("Get last position for %s Error \t:\t%s", vehicleName, err)
 		return model.VehiclePosition{}, err
 	}
-	defer cursor.Close(context.Background())
-	position := model.VehiclePosition{}
-	for cursor.Next(context.Background()) {
-		err = cursor.Decode(&position)
-	}
 
+	index := len(positions) - 1
+	position := positions[index]
 	return position, nil
-
 }
 
-func (c *MongoDbClient) Disconnect() {
-	c.client.Disconnect(context.TODO())
+func (c *MongoDbConnection) Disconnect() {
+	c.conn.Close()
 }
